@@ -1,40 +1,49 @@
-exports.testLoader = function(test) {
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+'use strict';
+
+const { Loader, Require, unload, override } = require('api-utils/cuddlefish');
+const packaging = require('@loader/options');
+
+exports['test loader'] = function(assert) {
   var prints = [];
   function print(message) {
     prints.push(message);
   }
 
-  var loader = test.makeSandboxedLoader({print: print,
-                                         globals: {foo: 1}});
+  let options = JSON.parse(JSON.stringify(packaging));
 
-  test.pass("loader instantiates within a securablemodule");
+  let loader = Loader(override(options, {
+    globals: {
+      print: print,
+      foo: 1
+    }
+  }));
+  let require = Require(loader, module);
 
-  test.assertEqual(loader.runScript("foo"), 1,
-                   "custom globals must work.");
+  var fixture = require('./loader/fixture');
 
-  loader.runScript("console.log('testing', 1, [2, 3, 4])");
+  assert.equal(fixture.foo, 1, 'custom globals must work.');
+  assert.equal(fixture.bar, 2, 'exports are set');
 
-  test.assertEqual(prints[0], "info: testing 1 2,3,4\n",
-                   "global console must work.");
+  assert.equal(prints[0], 'testing', 'global print must be injected.');
 
   var unloadsCalled = '';
 
-  loader.require("unload").when(function() { unloadsCalled += 'a'; });
-  loader.require("unload").when(function() { unloadsCalled += 'b'; });
+  require("api-utils/unload").when(function(reason) {
+    assert.equal(reason, 'test', 'unload reason is passed');
+    unloadsCalled += 'a';
+  });
+  require('unload.js').when(function() {
+    unloadsCalled += 'b';
+  });
 
-  loader.unload();
+  unload(loader, 'test');
 
-  test.assertEqual(unloadsCalled, 'ba',
-                   "loader.unload() must call cb's in LIFO order.");
-
-  loader = test.makeSandboxedLoader();
-
-  loader.runScript("memory.track({}, 'blah');");
-
-  test.assertEqual([name for each (name in loader.memory.getBins())
-                         if (name == "blah")].length,
-                   1,
-                   "global memory must work.");
-
-  loader.unload();
+  assert.equal(unloadsCalled, 'ba',
+               'loader.unload() must call listeners in LIFO order.');
 };
+
+require('test').run(exports);

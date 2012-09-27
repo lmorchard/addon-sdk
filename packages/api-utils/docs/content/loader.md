@@ -1,14 +1,16 @@
-<!-- contributed by Irakli Gozalishvili [gozala@mozilla.com] -->
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
 
-Loader
-------
+<!-- contributed by Irakli Gozalishvili [gozala@mozilla.com] -->
 
 Loader is base trait and it provides set of core properties and associated
 validations. Trait is useful for all the compositions providing high level
 APIs for creating JavaScript contexts that can access web content.
 
-Loader is composed from the [EventEmitter] trait, therefore instances
-of Loader and their descendants expose all the public properties
+Loader is composed from the
+[EventEmitter](packages/api-utils/events.html) trait, therefore
+instances of Loader and their descendants expose all the public properties
 exposed by EventEmitter along with additional public properties:
 
 Value changes on all of the above mentioned properties emit `propertyChange`
@@ -19,9 +21,9 @@ events on an instances.
 The following code creates a wrapper on hidden frame that reloads a web page
 in frame every time `contentURL` property is changed:
 
-    const hiddenFrames = require("hidden-frame");
-    const { Loader } = require("content");
-    const PageLoader = Loader.compose({
+    var hiddenFrames = require("hidden-frame");
+    var { Loader } = require("content");
+    var PageLoader = Loader.compose({
       constructor: function PageLoader(options) {
         options = options || {};
         if (options.contentURL)
@@ -58,10 +60,29 @@ property are loaded *after* those specified by the `contentScriptFile` property.
 
 <api name="contentScriptWhen">
 @property {string}
-When to load the content scripts.
-Possible values are "start" (default), which loads them as soon as
-the window object for the page has been created, and "ready", which loads
-them once the DOM content of the page has been loaded.
+When to load the content scripts. This may take one of the following
+values:
+
+* "start": load content scripts immediately after the document
+element for the page is inserted into the DOM, but before the DOM content
+itself has been loaded
+* "ready": load content scripts once DOM content has been loaded,
+corresponding to the
+[DOMContentLoaded](https://developer.mozilla.org/en/Gecko-Specific_DOM_Events)
+event
+* "end": load content scripts once all the content (DOM, JS, CSS,
+images) for the page has been loaded, at the time the
+[window.onload event](https://developer.mozilla.org/en/DOM/window.onload)
+fires
+
+</api>
+
+<api name="contentScriptOptions">
+@property {object}
+Read-only value exposed to content scripts under `self.options` property.
+
+Any kind of jsonable value (object, array, string, etc.) can be used here.
+Optional.
 </api>
 
 <api name="contentURL">

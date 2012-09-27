@@ -1,6 +1,10 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 var self = require("self");
-var panels = require("panel");
-var widgets = require("widget");
+var panels = require("addon-kit/panel");
+var widgets = require("addon-kit/widget");
 
 function replaceMom(html) {
   return html.replace("World", "Mom");

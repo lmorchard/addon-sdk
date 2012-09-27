@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 "use strict"
 
 var utils = require("type");
@@ -42,6 +46,13 @@ exports["test json atoms"] = function (assert) {
   assert.ok(utils.isJSON(true) && utils.isJSON(false), "booleans are JSON");
   assert.ok(utils.isJSON(4), utils.isJSON(0), "numbers are JSON");
   assert.ok(utils.isJSON("foo bar"), "strings are JSON");
+};
+
+exports["test instanceOf"] = function (assert) {
+  assert.ok(utils.instanceOf(assert, Object),
+            "assert is object from other sandbox");
+  assert.ok(utils.instanceOf(new Date(), Date), "instance of date");
+  assert.ok(!utils.instanceOf(null, Object), "null is not an instance");
 };
 
 exports["test json"] = function (assert) {

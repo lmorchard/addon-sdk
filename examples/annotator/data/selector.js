@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 /*
 The selector locates elements that are suitable for annotation and enables
 the user to select them.
@@ -17,8 +21,8 @@ var active = false;
 
 function resetMatchedElement() {
   if (matchedElement) {
-    $(matchedElement).css('background-color', originalBgColor);
-    $(matchedElement).unbind('click.annotator');
+    matchedElement.css('background-color', originalBgColor);
+    matchedElement.unbind('click.annotator');
   }
 }
 
@@ -29,6 +33,19 @@ self.on('message', function onMessage(activation) {
   }
 });
 
+function getInnerText(element) {
+  // jQuery.text() returns content of <script> tags, we need to ignore those
+  var list = [];
+  element.find("*").andSelf().contents()
+    .filter(function () {
+      return this.nodeType == 3 && this.parentNode.tagName != "SCRIPT";
+    })
+    .each(function () {
+      list.push(this.nodeValue);
+    });
+  return list.join("");
+}
+
 $('*').mouseenter(function() {
   if (!active || $(this).hasClass('annotated')) {
     return;
@@ -36,31 +53,21 @@ $('*').mouseenter(function() {
   resetMatchedElement();
   ancestor = $(this).closest("[id]");
   matchedElement = $(this).first();
-  originalBgColor = $(matchedElement).css('background-color');
-  $(matchedElement).css('background-color', 'yellow');
-  $(matchedElement).bind('click.annotator', function(event) {
+  originalBgColor = matchedElement.css('background-color');
+  matchedElement.css('background-color', 'yellow');
+  matchedElement.bind('click.annotator', function(event) {
     event.stopPropagation();
     event.preventDefault();
-    postMessage({
-      kind: 'show',
-      anchor: [
+    self.port.emit('show',
+      [
         document.location.toString(),
-        $(ancestor).attr("id"),
-        $(matchedElement).text()
+        ancestor.attr("id"),
+        getInnerText(matchedElement)
       ]
-   });
+   );
   });
 });
 
 $('*').mouseout(function() {
   resetMatchedElement();
 });
-
-/*
-Since there is no onDetach event for panels, we listen for the window's
-unload event and send the add-on a detach message.
-*/
-window.addEventListener('unload', function() {
-    postMessage({kind: 'detach'});
-  },
-  false);

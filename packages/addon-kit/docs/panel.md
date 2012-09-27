@@ -1,69 +1,385 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 <!-- contributed by Myk Melez [myk@mozilla.org] -->
 <!-- contributed by Irakli Gozalishvili [gozala@mozilla.com] -->
 
-The `panel` module creates floating modal "popup dialogs" that appear on top of
-web content and browser chrome and persist until dismissed by users or programs.
+This module exports a single constructor function `Panel` which constructs a
+new panel.
+
+A panel is a dialog. Its content is specified as HTML and you can
+execute scripts in it, so the appearance and behaviour of the panel
+is limited only by what you can do using HTML, CSS and JavaScript.
+
+The screenshot below shows a panel whose content is built from the
+list of currently open tabs:
+
+<img class="image-center" src="static-files/media/screenshots/panel-tabs-osx.png"
+alt="Simple panel example">
+
 Panels are useful for presenting temporary interfaces to users in a way that is
 easier for users to ignore and dismiss than a modal dialog, since panels are
 hidden the moment users interact with parts of the application interface outside
 them.
-
-Introduction
-------------
-
-The module exports a single constructor function `Panel` which constructs a
-new panel.
 
 A panel's content is loaded as soon as it is created, before the panel is shown,
 and the content remains loaded when a panel is hidden, so it is possible
 to keep a panel around in the background, updating its content as appropriate
 in preparation for the next time it is shown.
 
-Panels can be anchored to a particular element in a DOM window, including both
-chrome elements, i.e. parts of the host application interface, and content
-elements, i.e. parts of a web page in an application tab.
+Your add-on can receive notifications when a panel is shown or hidden by
+listening to its `show` and `hide` events.
 
-Panels have associated content scripts, which are JavaScript scripts that have
-access to the content loaded into the panels.  An add-on can specify one or
-more content scripts to load for a panel, and the add-on can communicate with
-those scripts via an asynchronous message passing API.  See
-[Working with Content Scripts](dev-guide/addon-development/web-content.html)
-for more information.
+## Panel Content ##
 
-Events
-------
+The panel's content is specified as HTML, which is loaded from the URL
+supplied in the `contentURL` option to the panel's constructor.
 
-Panels emit the following types of
-[events](dev-guide/addon-development/events.html).
+You can load remote HTML into the panel:
 
-### message ###
-
-This event is emitted when the panel's content scripts post a message.
-Listeners are passed the message as their first and only argument.
-
-### show ###
-
-This event is emitted when the panel is shown.
-
-### hide ###
-
-This event is emitted when the panel is hidden.
-
-Examples
---------
-
-Create and show a simple panel with content from the `data/` directory:
-
-    const data = require("self").data;
     var panel = require("panel").Panel({
-      contentURL: data.url("foo.html")
+      width: 180,
+      height: 180,
+      contentURL: "https://en.wikipedia.org/w/index.php?title=Jetpack&useformat=mobile"
     });
 
     panel.show();
 
-The tutorial section on
-[web content](dev-guide/addon-development/web-content.html) has
-a more complex example using panels.
+<img class="image-center" src="static-files/media/screenshots/wikipedia-jetpack-panel.png"
+alt="Wikipedia Jetpack panel">
+
+You can also load HTML that's been packaged with your add-on, and this is
+most probably how you will create dialogs. To do this, save
+the HTML in your add-on's `data` directory and load it using the `data.url()`
+method exported by the
+[`self`](packages/addon-kit/self.html) module, like this:
+
+    var panel = require("panel").Panel({
+      contentURL: require("self").data.url("myFile.html")
+    });
+
+    panel.show();
+
+## Updating Panel Content ##
+
+You can update the panel's content simply by setting the panel's `contentURL`
+property.
+
+Here's an add-on that adds two widgets to the add-on bar, one which
+shows Google's mobile site and one which shows Bing's mobile site. The widgets
+share a panel object, and switch between the two sites by updating the panel's
+`contentURL` property:
+
+    var panel = require("panel").Panel({
+      contentURL: "about:blank",
+      onHide: function () {
+        panel.contentURL = "about:blank";
+      }
+    });
+
+    require("widget").Widget({
+      id: "bing",
+      label: "Bing",
+      contentURL: "http://www.bing.com/favicon.ico",
+      panel: panel,
+      onClick: function() {
+        panel.contentURL = "http://m.bing.com/";
+      }
+    });
+
+    require("widget").Widget({
+      id: "google",
+      label: "Google",
+      contentURL: "http://www.google.com/favicon.ico",
+      panel: panel,
+      onClick: function() {
+        panel.contentURL = "http://www.google.com/xhtml";
+      }
+    });
+
+## Scripting Panel Content ##
+
+You can't directly access your panel's content from your main add-on code.
+To access the panel's content, you need to load a script into the panel.
+In the SDK these scripts are called "content scripts" because they're
+explicitly used for interacting with web content.
+
+While content scripts can access the content they're attached to, they can't
+use the SDK's APIs. So implementing a complete solution usually means you
+have to send messages between the content script and the main add-on code.
+
+* You can specify one or more content scripts to load into a panel using the
+`contentScript` or `contentScriptFile` options to the
+[`Panel()` constructor](packages/addon-kit/panel.html#Panel%28options%29).
+
+* You can communicate with the script using either the
+[`postMessage()`](dev-guide/guides/content-scripts/using-postmessage.html)
+API or (preferably, usually) the
+[`port`](dev-guide/guides/content-scripts/using-port.html) API.
+
+For example, here's an add-on whose content script intercepts mouse clicks
+on links inside the panel, and sends the target URL to the main add-on
+code. The content script sends messages using `self.port.emit()` and the
+add-on script receives them using `panel.port.on()`.
+
+    var myScript = "window.addEventListener('click', function(event) {" +
+                   "  var t = event.target;" +
+                   "  if (t.nodeName == 'A')" +
+                   "    self.port.emit('click-link', t.toString());" +
+                   "}, false);"
+
+    var panel = require("panel").Panel({
+      contentURL: "http://www.bbc.co.uk/mobile/index.html",
+      contentScript: myScript
+    });
+
+    panel.port.on("click-link", function(url) {
+      console.log(url);
+    });
+
+    panel.show();
+
+This example uses `contentScript` to supply the script as a string. It's
+usually better practice to use `contentScriptFile`, which is a URL pointing
+to a script file saved under your add-on's `data` directory.
+
+<div class="warning">
+<p>Unless your content script is extremely simple and consists only of a
+static string, don't use <code>contentScript</code>: if you do, you may
+have problems getting your add-on approved on AMO.</p>
+<p>Instead, keep the script in a separate file and load it using
+<code>contentScriptFile</code>. This makes your code easier to maintain,
+secure, debug and review.</p>
+</div>
+
+<img class="image-right" src="static-files/media/screenshots/text-entry-panel.png"
+alt="Text entry panel">
+
+### Getting User Input ###
+
+The following add-on adds a widget which displays a panel when
+clicked. The panel just contains a `<textarea>` element: when the user
+presses the `return` key, the contents of the `<textarea>` is sent to the
+main add-on code.
+
+The add-on consists of three files:
+
+* **`main.js`**: the main add-on code, that creates the widget and panel
+* **`get-text.js`**: the content script that interacts with the panel content
+* **`text-entry.html`**: the panel content itself, specified as HTML
+
+"main.js" is saved in your add-on's `lib` directory, and the other two files
+go in your add-on's `data` directory:
+
+<pre>
+my-addon/
+         data/
+              get-text.js
+              text-entry.html
+         lib/
+             main.js
+</pre>
+
+The "main.js" looks like this:
+
+    var data = require("self").data;
+
+    // Create a panel whose content is defined in "text-entry.html".
+    // Attach a content script called "get-text.js".
+    var text_entry = require("panel").Panel({
+      width: 212,
+      height: 200,
+      contentURL: data.url("text-entry.html"),
+      contentScriptFile: data.url("get-text.js")
+    });
+
+    // Send the content script a message called "show" when
+    // the panel is shown.
+    text_entry.on("show", function() {
+      text_entry.port.emit("show");
+    });
+
+    // Listen for messages called "text-entered" coming from
+    // the content script. The message payload is the text the user
+    // entered.
+    // In this implementation we'll just log the text to the console.
+    text_entry.port.on("text-entered", function (text) {
+      console.log(text);
+      text_entry.hide();
+    });
+
+    // Create a widget, and attach the panel to it, so the panel is
+    // shown when the user clicks the widget.
+    require("widget").Widget({
+      label: "Text entry",
+      id: "text-entry",
+      contentURL: "http://www.mozilla.org/favicon.ico",
+      panel: text_entry
+    });
+
+The content script "get-text.js" looks like this:
+
+    self.port.on("show", function (arg) {
+      var textArea = document.getElementById('edit-box');
+      textArea.focus();
+      // When the user hits return, send a message to main.js.
+      // The message payload is the contents of the edit box.
+      textArea.onkeyup = function(event) {
+        if (event.keyCode == 13) {
+          // Remove the newline.
+          text = textArea.value.replace(/(\r\n|\n|\r)/gm,"");
+          self.port.emit("text-entered", text);
+          textArea.value = '';
+        }
+      };
+    });
+
+Finally, the "text-entry.html" file defines the `<textarea>` element:
+
+<pre class="brush: html">
+
+&lt;html&gt;
+
+&lt;head&gt;
+  &lt;style type="text/css" media="all"&gt;
+    textarea {
+      margin: 10px;
+    }
+  &lt;/style&gt;
+&lt;/head&gt;
+
+&lt;body&gt;
+  &lt;textarea rows="10" cols="20" id="edit-box">&lt;/textarea&gt;
+&lt;/body&gt;
+
+&lt;/html&gt;
+</pre>
+
+To learn much more about content scripts, see the
+[Working with Content Scripts](dev-guide/guides/content-scripts/index.html)
+guide.
+
+<div class="experimental">
+<h3>Scripting Trusted Panel Content</h3>
+
+**Note that the feature described in this section is experimental: we'll
+very probably continue to support it, but the name of the `addon`
+property might change in a future release.**
+
+We've already seen that you can package HTML files in your add-on's `data`
+directory and use them to define the panel's content. We can call this
+"trusted" content, because unlike content loaded from a source outside the
+add-on, the add-on author knows exactly what it's doing. To
+interact with trusted content you don't need to use content scripts:
+you can just include a script from the HTML file in the normal way, using
+`script` tags.
+
+Like a content script, these scripts can communicate with the add-on code
+using the
+[`postMessage()`](dev-guide/guides/content-scripts/using-postmessage.html)
+API or the
+[`port`](dev-guide/guides/content-scripts/using-port.html) API.
+The crucial difference is that these scripts access the `postMessage`
+and `port` objects through the `addon` object, whereas content scripts
+access them through the `self` object.
+
+To show the difference, we can easily convert the `text-entry` add-on above
+to use normal page scripts instead of content scripts.
+
+The main add-on code is exactly the same as the main add-on code in the
+previous example, except that we don't attach a content script:
+
+    var data = require("self").data;
+
+    // Create a panel whose content is defined in "text-entry.html".
+    var text_entry = require("panel").Panel({
+      width: 212,
+      height: 200,
+      contentURL: data.url("text-entry.html"),
+    });
+
+    // Send the page script a message called "show" when
+    // the panel is shown.
+    text_entry.on("show", function() {
+      text_entry.port.emit("show");
+    });
+
+    // Listen for messages called "text-entered" coming from
+    // the page script. The message payload is the text the user
+    // entered.
+    // In this implementation we'll just log the text to the console.
+    text_entry.port.on("text-entered", function (text) {
+      console.log(text);
+      text_entry.hide();
+    });
+
+    // Create a widget, and attach the panel to it, so the panel is
+    // shown when the user clicks the widget.
+    require("widget").Widget({
+      label: "Text entry",
+      id: "text-entry",
+      contentURL: "http://www.mozilla.org/favicon.ico",
+      panel: text_entry
+    });
+
+The page script is exactly the same as the content script above, except
+that instead of `self`, we use `addon` to access the messaging APIs:
+
+    addon.port.on("show", function (arg) {
+      var textArea = document.getElementById('edit-box');
+      textArea.focus();
+      // When the user hits return, send a message to main.js.
+      // The message payload is the contents of the edit box.
+      textArea.onkeyup = function(event) {
+        if (event.keyCode == 13) {
+          // Remove the newline.
+          text = textArea.value.replace(/(\r\n|\n|\r)/gm,"");
+          addon.port.emit("text-entered", text);
+          textArea.value = '';
+        }
+      };
+    });
+
+Finally, the HTML file now references "get-text.js" inside a `script` tag:
+
+<pre class="brush: html">
+
+&lt;html&gt;
+
+&lt;head&gt;
+  &lt;style type="text/css" media="all"&gt;
+    textarea {
+      margin: 10px;
+    }
+  &lt;/style&gt;
+  &lt;script src="get-text.js"&gt;&lt;/script&gt;
+&lt;/head&gt;
+
+&lt;body&gt;
+  &lt;textarea rows="10" cols="20" id="edit-box">&lt;/textarea&gt;
+&lt;/body&gt;
+
+&lt;/html&gt;
+</pre>
+</div>
+
+## Styling Trusted Panel Content ##
+
+When the panel's content is specified using an HTML file in your `data`
+directory, you can style it using CSS, either embedding the CSS directly
+in the file or referencing a CSS file stored under `data`.
+
+The panel's default style is different for each operating system:
+
+<img class="image-center" src="static-files/media/screenshots/panel-default-style.png"
+alt="OS X panel default style">
+
+This helps to ensure that the panel's style is consistent with the dialogs
+displayed by Firefox and other applications, but means you need to take care
+when applying your own styles. For example, if you set the panel's
+`background-color` property to `white` and do not set the `color` property,
+then the panel's text will be invisible on OS X although it looks fine on Ubuntu.
 
 <api name="Panel">
 @class
@@ -103,17 +419,47 @@ Creates a panel.
     A string or an array of strings containing the texts of content scripts to
     load.  Content scripts specified by this property are loaded *after* those
     specified by the `contentScriptFile` property.
-  @prop [contentScriptWhen] {string}
-    When to load the content scripts.  Optional.
-    Possible values are "start" (default), which loads them as soon as
-    the window object for the page has been created, and "ready", which loads
-    them once the DOM content of the page has been loaded.
+  @prop [contentScriptWhen="end"] {string}
+    When to load the content scripts. This may take one of the following
+    values:
+
+    * "start": load content scripts immediately after the document
+    element for the panel is inserted into the DOM, but before the DOM content
+    itself has been loaded
+    * "ready": load content scripts once DOM content has been loaded,
+    corresponding to the
+    [DOMContentLoaded](https://developer.mozilla.org/en/Gecko-Specific_DOM_Events)
+    event
+    * "end": load content scripts once all the content (DOM, JS, CSS,
+    images) for the panel has been loaded, at the time the
+    [window.onload event](https://developer.mozilla.org/en/DOM/window.onload)
+    fires
+
+    This property is optional and defaults to "end".
+  @prop [contentScriptOptions] {object}
+    Read-only value exposed to content scripts under `self.options` property.
+
+    Any kind of jsonable value (object, array, string, etc.) can be used here.
+    Optional.
+
   @prop [onMessage] {function}
-    An optional "message" event listener.  See Events above.
+    Include this to listen to the panel's `message` event.
   @prop [onShow] {function}
-    An optional "show" event listener.  See Events above.
+    Include this to listen to the panel's `show` event.
   @prop [onHide] {function}
-    An optional "hide" event listener.  See Events above.
+    Include this to listen to the panel's `hide` event.
+</api>
+
+<api name="port">
+@property {EventEmitter}
+[EventEmitter](packages/api-utils/events.html) object that allows you to:
+
+* send events to the content script using the `port.emit` function
+* receive events from the content script using the `port.on` function
+
+See the guide to
+<a href="dev-guide/guides/content-scripts/using-port.html">
+communicating using <code>port</code></a> for details.
 </api>
 
 <api name="isShowing">
@@ -133,7 +479,9 @@ The width of the panel in pixels.
 
 <api name="contentURL">
 @property {string}
-The URL of the content loaded in the panel.
+The URL of content loaded into the panel.  This can point to
+local content loaded from your add-on's "data" directory or remote content.
+Setting it updates the panel's content immediately.
 </api>
 
 <api name="allow">
@@ -159,10 +507,29 @@ specified by the `contentScriptFile` property.
 
 <api name="contentScriptWhen">
 @property {string}
-When to load the content scripts.
-Possible values are "start" (default), which loads them as soon as
-the window object for the page has been created, and "ready", which loads
-them once the DOM content of the page has been loaded.
+When to load the content scripts. This may have one of the following
+values:
+
+* "start": load content scripts immediately after the document
+element for the panel is inserted into the DOM, but before the DOM content
+itself has been loaded
+* "ready": load content scripts once DOM content has been loaded,
+corresponding to the
+[DOMContentLoaded](https://developer.mozilla.org/en/Gecko-Specific_DOM_Events)
+event
+* "end": load content scripts once all the content (DOM, JS, CSS,
+images) for the panel has been loaded, at the time the
+[window.onload event](https://developer.mozilla.org/en/DOM/window.onload)
+fires
+
+</api>
+
+<api name="contentScriptOptions">
+@property {object}
+Read-only value exposed to content scripts under `self.options` property.
+
+Any kind of jsonable value (object, array, string, etc.) can be used here.
+Optional.
 </api>
 
 <api name="destroy">
@@ -182,10 +549,6 @@ The message to send.  Must be stringifiable to JSON.
 <api name="show">
 @method
 Displays the panel.
-@param [anchor] {handle}
-A handle to a DOM node in a page to which the panel should appear to be
-connected.  If not given, the panel is centered inside the most recent browser
-window.
 </api>
 
 <api name="hide">
@@ -219,4 +582,39 @@ The new height of the panel in pixels.
 @param listener {function}
   The listener function that was registered.
 </api>
+
+<api name="show">
+@event
+This event is emitted when the panel is shown.
+</api>
+
+<api name="hide">
+@event
+This event is emitted when the panel is hidden.
+</api>
+
+<api name="message">
+@event
+If you listen to this event you can receive message events from content
+scripts associated with this panel. When a content script posts a
+message using `self.postMessage()`, the message is delivered to the add-on
+code in the panel's `message` event.
+
+@argument {value}
+Listeners are passed a single argument which is the message posted
+from the content script. The message can be any
+<a href = "dev-guide/guides/content-scripts/using-port.html#json_serializable">JSON-serializable value</a>.
+</api>
+
+<api name="error">
+@event
+This event is emitted when an uncaught runtime error occurs in one of the
+panel's content scripts.
+
+@argument {Error}
+Listeners are passed a single argument, the
+[Error](https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Error)
+object.
+</api>
+
 </api>

@@ -1,30 +1,12 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 <!-- contributed by Atul Varma [atul@mozilla.com]  -->
 <!-- edited by Noelle Murata [fiveinchpixie@gmail.com]  -->
 
 The `xhr` module provides access to `XMLHttpRequest` functionality, also known
 as AJAX.
-
-## Constructors ##
-
-<api name="XMLHttpRequest">
-@constructor
-  Creates an `XMLHttpRequest`. This is a constructor, so its use should always
-  be preceded by the `new` operator.  For more information about
-  `XMLHttpRequest` objects, see the MDC page on
-  [Using XMLHttpRequest](https://developer.mozilla.org/En/Using_XMLHttpRequest)
-  and the Limitations section below.
-</api>
-
-## Functions ##
-
-<api name="getRequestCount">
-@function
-  Returns the number of `XMLHttpRequest` objects that are alive (i.e., currently
-  active or about to be).
-@returns {integer}
-  The number of live `XMLHttpRequest` objects.
-</api>
-
 
 ## Limitations ##
 
@@ -52,7 +34,7 @@ access to any local area networks, VPNs, and the internet.
 
 ### Threat Model ###
 
-The `XMLHttpRequest` object can be used by an extension to "phone
+The `XMLHttpRequest` object can be used by an add-on to "phone
 home" and transmit potentially sensitive user data to third
 parties.
 
@@ -90,3 +72,24 @@ packaged, read-only resources.
 Finally, we need to also consider attenuating http/https requests such
 that they're "sandboxed" and don't communicate potentially sensitive
 cookie information.
+
+<api name="XMLHttpRequest">
+@class
+
+<api name="XMLHttpRequest">
+@constructor
+  Creates an `XMLHttpRequest`. This is a constructor, so its use should always
+  be preceded by the `new` operator.  For more information about
+  `XMLHttpRequest` objects, see the MDC page on
+  [Using XMLHttpRequest](https://developer.mozilla.org/En/Using_XMLHttpRequest)
+  and the Limitations section in this page.
+</api>
+</api>
+
+<api name="getRequestCount">
+@function
+  Returns the number of `XMLHttpRequest` objects that are alive (i.e., currently
+  active or about to be).
+@returns {integer}
+  The number of live `XMLHttpRequest` objects.
+</api>

@@ -1,3 +1,7 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 <!-- contributed by Myk Melez [myk@mozilla.org] -->
 <!-- contributed by Irakli Gozalishvili [gozala@mozilla.com] -->
 
@@ -24,8 +28,8 @@ context. If frame is not provided hidden frame will be created.
 Examples
 --------
 
-    const { Symbiont } = require('content');
-    const Thing = Symbiont.resolve({ constructor: '_init' }).compose({
+    var { Symbiont } = require('content');
+    var Thing = Symbiont.resolve({ constructor: '_init' }).compose({
       constructor: function Thing(options) {
         // `getMyFrame` returns the host application frame in which
         // the page is loaded.
@@ -34,36 +38,56 @@ Examples
       }
     });
 
-See the [panel] module for a real-world example of usage of this module.
+See the [panel][] module for a real-world example of usage of this module.
 
-[panel]:#module/api-utils/panel
+[panel]:packages/addon-kit/panel.html
 
 Reference
 ---------
 
 <api name="Symbiont">
 @class
-Symbiont is composed from the [Worker] trait, therefore instances
+Symbiont is composed from the [Worker][] trait, therefore instances
 of Symbiont and their descendants expose all the public properties
-exposed by [Worker] along with additional public properties that
+exposed by [Worker][] along with additional public properties that
 are listed below:
 
-[Worker]:#module/api-utils/content/worker
+[Worker]:packages/api-utils/content/worker.html
+
 <api name="Symbiont">
 @constructor
 Creates a content symbiont.
 @param options {object}
-  Options for the constructor. Includes all the keys that [Worker] constructor
-  accepts and few additional:
-[Worker]:#module/api-utils/panel
+  Options for the constructor. Includes all the keys that
+the [Worker](packages/api-utils/content/worker.html)
+constructor accepts and a few more:
+
   @prop [frame] {object}
     The host application frame in which the page is loaded.
     If frame is not provided hidden one will be created.
-  @prop [contentScriptWhen] {string}
-    When to load the content scripts.  Optional.
-    Possible values are "start" (default), which loads them as soon as
-    the window object for the page has been created, and "ready", which loads
-    them once the DOM content of the page has been loaded.
+  @prop [contentScriptWhen="end"] {string}
+    When to load the content scripts. This may take one of the following
+    values:
+
+    * "start": load content scripts immediately after the document
+    element for the page is inserted into the DOM, but before the DOM content
+    itself has been loaded
+    * "ready": load content scripts once DOM content has been loaded,
+    corresponding to the
+    [DOMContentLoaded](https://developer.mozilla.org/en/Gecko-Specific_DOM_Events)
+    event
+    * "end": load content scripts once all the content (DOM, JS, CSS,
+    images) for the page has been loaded, at the time the
+    [window.onload event](https://developer.mozilla.org/en/DOM/window.onload)
+    fires
+
+    This property is optional and defaults to "end".
+  @prop [contentScriptOptions] {object}
+    Read-only value exposed to content scripts under `self.options` property.
+
+    Any kind of jsonable value (object, array, string, etc.) can be used here.
+    Optional.
+
   @prop [allow] {object}
     Permissions for the content, with the following keys:
       @prop [script] {boolean}
@@ -87,10 +111,29 @@ property are loaded *after* those specified by the `contentScriptFile` property.
 
 <api name="contentScriptWhen">
 @property {string}
-When to load the content scripts.
-Possible values are "start" (default), which loads them as soon as
-the window object for the page has been created, and "ready", which loads
-them once the DOM content of the page has been loaded.
+When to load the content scripts. This may have one of the following
+values:
+
+* "start": load content scripts immediately after the document
+element for the page is inserted into the DOM, but before the DOM content
+itself has been loaded
+* "ready": load content scripts once DOM content has been loaded,
+corresponding to the
+[DOMContentLoaded](https://developer.mozilla.org/en/Gecko-Specific_DOM_Events)
+event
+* "end": load content scripts once all the content (DOM, JS, CSS,
+images) for the page has been loaded, at the time the
+[window.onload event](https://developer.mozilla.org/en/DOM/window.onload)
+fires
+
+</api>
+
+<api name="contentScriptOptions">
+@property {object}
+Read-only value exposed to content scripts under `self.options` property.
+
+Any kind of jsonable value (object, array, string, etc.) can be used here.
+Optional.
 </api>
 
 <api name="contentURL">
@@ -100,9 +143,9 @@ The URL of the content loaded.
 
 <api name="allow">
 @property {object}
-Permissions for the content, with the following keys:
-  @prop script {boolean}
-  Whether or not to execute script in the content.  Defaults to true.
+Permissions for the content, with a single boolean key called `script` which
+defaults to true and indicates whether or not to execute scripts in the
+content.
 </api>
 
 </api>

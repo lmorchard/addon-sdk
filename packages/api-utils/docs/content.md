@@ -1,11 +1,15 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 <!-- contributed by Irakli Gozalishvili [gozala@mozilla.com] -->
 
-The `content` module exports three different traits [Loader], [Worker] and
-[Symbiont]. None of this traits is intended to be used directly by programs.
+The `content` module exports three different traits [Loader][], [Worker][] and
+[Symbiont][]. None of this traits is intended to be used directly by programs.
 Rather, they are intended to be used by other modules that provide high
 level APIs to programs or libraries.
 
-[Loader]:#module/api-utils/content/loader
-[Worker]:#module/api-utils/content/worker
-[Symbiont]:#module/api-utils/content/symbiont
+[Loader]:packages/api-utils/content/loader.html
+[Worker]:packages/api-utils/content/worker.html
+[Symbiont]:packages/api-utils/content/symbiont.html
 

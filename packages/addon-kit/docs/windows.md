@@ -1,3 +1,7 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 <!-- contributed by Felipe Gomes [felipc@gmail.com]  -->
 
 
@@ -7,23 +11,6 @@ tabs, and open/close related functions and events.
 This module currently only supports browser windows and does not provide
 access to non-browser windows such as the Bookmarks Library, preferences
 or other non-browser windows created via add-ons.
-
-Events
-------
-
-Events represent common actions and state changes for windows.
-
-Listeners are passed the `window` object that triggered the event.
-
-All the windows and lists of windows emit following events:
-
-### open ###
-Event emitted when a new window is open.
-This does not mean that the content has loaded, only that the browser window
-itself is fully visible to the user.
-
-### close ###
-Event emitted when a window is closed.
 
 <api name="browserWindows">
 @property {List}
@@ -56,6 +43,17 @@ Object emits all the events listed under "Events" section.
       console.log("A window was closed.");
     });
 
+    // add a listener to the 'activate' event
+    windows.on('activate', function(window) {
+      console.log("A window was activated.");
+    });
+
+    // add a listener to the 'deactivate' event
+    windows.on('deactivate', function(window) {
+      console.log("A window was deactivated.");
+    });
+
+
 <api name="activeWindow">
 @property {BrowserWindow}
 
@@ -82,14 +80,30 @@ Open a new window.
     var windows = require("windows").browserWindows;
 
     // Open a new window.
-    windows.open("http://www.mysite.com");
+    windows.open("http://www.example.com");
 
     // Open a new window and set a listener for "open" event.
     windows.open({
-      url: "http://www.mysite.com",
+      url: "http://www.example.com",
       onOpen: function(window) {
         // do stuff like listen for content
         // loading.
+      }
+    });
+
+Returns the window that was opened:
+
+    var widgets = require("widget");
+    var windows = require("windows").browserWindows;
+
+    var example = windows.open("http://www.example.com");
+
+    var widget = widgets.Widget({
+      id: "close-window",
+      label: "Close window",
+      contentURL: "http://www.mozilla.org/favicon.ico",
+      onClick: function() {
+        example.close();
       }
     });
 
@@ -112,6 +126,16 @@ functional and its properties can be accessed. This is an optional property.
 @prop [onClose] {function}
 A callback function that is called when the window will be called.
 This is an optional property.
+
+@prop [onActivate] {function}
+A callback function that is called when the window is made active.
+This is an optional property.
+
+@prop [onDeactivate] {function}
+A callback function that is called when the window is made inactive.
+This is an optional property.
+
+@returns {BrowserWindow}
 </api>
 
 <api name="BrowserWindow">
@@ -148,8 +172,13 @@ This property is read-only.
 <api name="tabs">
 @property {TabList}
 A live list of tabs in this window. This object has the same interface as the
-[`tabs` API](packages/addon-kit/docs/tabs.html), except it contains only the
+[`tabs` API](packages/addon-kit/tabs.html), except it contains only the
 tabs in this window, not all tabs in all windows. This property is read-only.
+</api>
+
+<api name="isPrivateBrowsing">
+@property {boolean}
+Returns `true` if the window is in private browsing mode, and `false` otherwise.
 </api>
 
 <api name="activate">
@@ -169,3 +198,43 @@ This is an optional argument.
 
 </api>
 
+<api name="open">
+@event
+Event emitted when a new window is open.
+This does not mean that the content has loaded, only that the browser window
+itself is fully visible to the user.
+@argument {Window}
+Listeners are passed the `window` object that triggered the event.
+</api>
+
+<api name="close">
+@event
+Event emitted when a window is closed.
+@argument {Window}
+Listeners are passed the `window` object that triggered the event.
+</api>
+
+<api name="activate">
+@event
+Event emitted when an inactive window is made active.
+@argument {Window}
+Listeners are passed the `window` object that has become active.
+</api>
+
+<api name="deactivate">
+@event
+Event emitted when the active window is made inactive.
+
+@argument {Window}
+Listeners are passed the `window` object that has become inactive.
+</api>
+
+<api name="private-browsing">
+@event
+Event emitted when a window's private-browsing mode changes.
+Check the window's [`isPrivateBrowsing`](packages/addon-kit/windows.html#isPrivateBrowsing)
+property to determine the window is in private browsing mode or not.
+
+@argument {Window}
+Listeners are passed the `window` object that triggered the event.
+</api>

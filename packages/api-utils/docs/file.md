@@ -1,9 +1,41 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+
 <!-- contributed by Drew Willcoxon [adw@mozilla.com]  -->
 <!-- contributed by Atul Varma [atul@mozilla.com]  -->
 <!-- edited by Noelle Murata [fiveinchpixie@gmail.com]  -->
 
-
 The `file` module provides access to the local filesystem.
+
+
+Paths
+-----
+
+Path specifications in this API are platform-specific.  This means that on
+Windows paths are specified using the backslash path separator (`\`), and on
+Unix-like systems like Linux and OS X paths are specified using the forward
+slash path separator (`/`).
+
+If your add-on uses literal Windows-style path specifications with this API,
+your add-on likely won't work when users run it on Unix-like systems.  Likewise,
+if your add-on uses literal Unix-style path specifications, it won't work for
+users on Windows.
+
+To ensure your add-on works for everyone, generate paths using the
+[`join`](packages/api-utils/file.html#join(...)) function.  Unfortunately
+this API does not currently provide a way to obtain an absolute base path which
+you could then use with `join`.  For now, you need to
+[`require("chrome")`](dev-guide/tutorials/chrome.html) and use the
+XPCOM directory service as described at
+[MDN](https://developer.mozilla.org/en/Code_snippets/File_I%2F%2FO#Getting_special_files).
+
+Note that if you do decide to hardcode Windows-style paths, be sure to escape
+backslashes in strings.  For example, to specify the file at `C:\Users\Myk`, you
+need to use the string `"C:\\Users\\Myk"`, not `"C:\Users\Myk"`.  You can read
+more about escaping characters in strings at
+[MDN](https://developer.mozilla.org/en/JavaScript/Guide/Values,_Variables,_and_Literals#Escaping_Characters).
+
 
 <api name="basename">
 @function
@@ -40,7 +72,8 @@ The `file` module provides access to the local filesystem.
   Takes a variable number of strings, joins them on the file system's path
   separator, and returns the result.
 @param ... {strings}
-  A variable number of strings to join.
+  A variable number of strings to join.  The first string must be an absolute
+  path.
 @returns {string}
   A single string formed by joining the strings on the file system's path
   separator.
@@ -79,20 +112,25 @@ The `file` module provides access to the local filesystem.
 @returns {stream}
   If the file is opened in text read-only `mode`, a `TextReader` is returned,
   and if text write-only mode, a `TextWriter` is returned.  See
-  [`text-streams`](packages/api-utils/docs/text-streams.html) for information on
+  [`text-streams`](packages/api-utils/text-streams.html) for information on
   these text stream objects.  If the file is opened in binary read-only `mode`,
   a `ByteReader` is returned, and if binary write-only mode, a `ByteWriter` is
   returned.  See
-  [`byte-streams`](packages/api-utils/docs/byte-streams.html) for more
+  [`byte-streams`](packages/api-utils/byte-streams.html) for more
   information on these byte stream objects.  Opened files should always be
   closed after use by calling `close` on the returned stream.
 </api>
 
 <api name="read">
 @function
-  Opens a file in text mode and returns a string containing its entire contents.
+  Opens a file and returns a string containing its entire contents.
 @param path {string}
   The path of the file to read.
+@param [mode] {string}
+  An optional string, each character of which describes a characteristic of the
+  returned stream.  If the string contains `"b"`, the contents will be returned 
+  in binary mode. If `"b"` is not present or `mode` is not given, the file
+  contents will be returned in text mode. 
 @returns {string}
   A string containing the file's entire contents.
 </api>

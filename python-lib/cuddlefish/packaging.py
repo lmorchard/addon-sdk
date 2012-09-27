@@ -1,3 +1,7 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 import os
 import sys
 import re
@@ -5,7 +9,6 @@ import copy
 
 import simplejson as json
 from cuddlefish.bunch import Bunch
-from manifest import scan_package, update_manifest_with_fileinfo
 
 MANIFEST_NAME = 'package.json'
 
@@ -17,7 +20,8 @@ DEFAULT_ICON = 'icon.png'
 DEFAULT_ICON64 = 'icon64.png'
 
 METADATA_PROPS = ['name', 'description', 'keywords', 'author', 'version',
-                  'contributors', 'license', 'url', 'icon', 'icon64']
+                  'contributors', 'license', 'homepage', 'icon', 'icon64',
+                  'main', 'directories']
 
 RESOURCE_HOSTNAME_RE = re.compile(r'^[a-z0-9_\-]+$')
 
@@ -55,23 +59,38 @@ def validate_resource_hostname(name):
 
       >>> validate_resource_hostname('blarg')
 
+      >>> validate_resource_hostname('bl arg')
+      Traceback (most recent call last):
+      ...
+      ValueError: Error: the name of your package contains an invalid character.
+      Package names can contain only lower-case letters, numbers, underscores, and dashes.
+      Current package name: bl arg
+
       >>> validate_resource_hostname('BLARG')
       Traceback (most recent call last):
       ...
-      ValueError: package names need to be lowercase: BLARG
+      ValueError: Error: the name of your package contains upper-case letters.
+      Package names can contain only lower-case letters, numbers, underscores, and dashes.
+      Current package name: BLARG
 
       >>> validate_resource_hostname('foo@bar')
       Traceback (most recent call last):
       ...
-      ValueError: invalid resource hostname: foo@bar
+      ValueError: Error: the name of your package contains an invalid character.
+      Package names can contain only lower-case letters, numbers, underscores, and dashes.
+      Current package name: foo@bar
     """
 
     # See https://bugzilla.mozilla.org/show_bug.cgi?id=568131 for details.
     if not name.islower():
-        raise ValueError('package names need to be lowercase: %s' % name)
+        raise ValueError("""Error: the name of your package contains upper-case letters.
+Package names can contain only lower-case letters, numbers, underscores, and dashes.
+Current package name: %s""" % name)
 
     if not RESOURCE_HOSTNAME_RE.match(name):
-        raise ValueError('invalid resource hostname: %s' % name)
+        raise ValueError("""Error: the name of your package contains an invalid character.
+Package names can contain only lower-case letters, numbers, underscores, and dashes.
+Current package name: %s""" % name)
 
 def find_packages_with_module(pkg_cfg, name):
     # TODO: Make this support more than just top-level modules.
@@ -102,10 +121,29 @@ def get_metadata(pkg_cfg, deps):
                 metadata[pkg_name][prop] = cfg[prop]
     return metadata
 
-def apply_default_dir(base_json, base_path, dirname):
-    if (not base_json.get(dirname) and
-        os.path.isdir(os.path.join(base_path, dirname))):
-        base_json[dirname] = dirname
+def set_section_dir(base_json, name, base_path, dirnames, allow_root=False):
+    resolved = compute_section_dir(base_json, base_path, dirnames, allow_root)
+    if resolved:
+        base_json[name] = os.path.abspath(resolved)
+
+def compute_section_dir(base_json, base_path, dirnames, allow_root):
+    # PACKAGE_JSON.lib is highest priority
+    # then PACKAGE_JSON.directories.lib
+    # then lib/ (if it exists)
+    # then . (but only if allow_root=True)
+    for dirname in dirnames:
+        if base_json.get(dirname):
+            return os.path.join(base_path, base_json[dirname])
+    if "directories" in base_json:
+        for dirname in dirnames:
+            if dirname in base_json.directories:
+                return os.path.join(base_path, base_json.directories[dirname])
+    for dirname in dirnames:
+        if os.path.isdir(os.path.join(base_path, dirname)):
+            return os.path.join(base_path, dirname)
+    if allow_root:
+        return os.path.abspath(base_path)
+    return None
 
 def normalize_string_or_array(base_json, key):
     if base_json.get(key):
@@ -131,8 +169,26 @@ def get_config_in_dir(path):
     if 'name' not in base_json:
         base_json.name = os.path.basename(path)
 
-    for dirname in ['lib', 'tests', 'data', 'packages']:
-        apply_default_dir(base_json, path, dirname)
+    # later processing steps will expect to see the following keys in the
+    # base_json that we return:
+    #
+    #  name: name of the package
+    #  lib: list of directories with .js files
+    #  test: list of directories with test-*.js files
+    #  doc: list of directories with documentation .md files
+    #  data: list of directories with bundled arbitrary data files
+    #  packages: ?
+
+    if (not base_json.get('tests') and
+        os.path.isdir(os.path.join(path, 'test'))):
+        base_json['tests'] = 'test'
+
+    set_section_dir(base_json, 'lib', path, ['lib'], True)
+    set_section_dir(base_json, 'tests', path, ['test', 'tests'], False)
+    set_section_dir(base_json, 'doc', path, ['doc', 'docs'])
+    set_section_dir(base_json, 'data', path, ['data'])
+    set_section_dir(base_json, 'packages', path, ['packages'])
+    set_section_dir(base_json, 'locale', path, ['locale'])
 
     if (not base_json.get('icon') and
         os.path.isfile(os.path.join(path, DEFAULT_ICON))):
@@ -143,6 +199,8 @@ def get_config_in_dir(path):
         base_json['icon64'] = DEFAULT_ICON64
 
     for key in ['lib', 'tests', 'dependencies', 'packages']:
+        # TODO: lib/tests can be an array?? consider interaction with
+        # compute_section_dir above
         normalize_string_or_array(base_json, key)
 
     if 'main' not in base_json and 'lib' in base_json:
@@ -162,7 +220,7 @@ def _is_same_file(a, b):
         return os.path.samefile(a, b)
     return a == b
 
-def build_config(root_dir, target_cfg):
+def build_config(root_dir, target_cfg, packagepath=[]):
     dirs_to_scan = []
 
     def add_packages_from_config(pkgconfig):
@@ -175,14 +233,20 @@ def build_config(root_dir, target_cfg):
     packages_dir = os.path.join(root_dir, 'packages')
     if os.path.exists(packages_dir) and os.path.isdir(packages_dir):
         dirs_to_scan.append(packages_dir)
+    dirs_to_scan.extend(packagepath)
 
     packages = Bunch({target_cfg.name: target_cfg})
 
     while dirs_to_scan:
         packages_dir = dirs_to_scan.pop()
-        package_paths = [os.path.join(packages_dir, dirname)
-                         for dirname in os.listdir(packages_dir)
-                         if not dirname.startswith('.')]
+        if os.path.exists(os.path.join(packages_dir, "package.json")):
+            package_paths = [packages_dir]
+        else:
+            package_paths = [os.path.join(packages_dir, dirname)
+                             for dirname in os.listdir(packages_dir)
+                             if not dirname.startswith('.')]
+            package_paths = [dirname for dirname in package_paths
+                             if os.path.isdir(dirname)]
 
         for path in package_paths:
             pkgconfig = get_config_in_dir(path)
@@ -211,21 +275,19 @@ def get_deps_for_targets(pkg_cfg, targets):
                 raise PackageNotFoundError(dep, required_reason)
             dep_cfg = pkg_cfg.packages[dep]
             deps_left.extend([[i, dep] for i in dep_cfg.get('dependencies', [])])
+            deps_left.extend([[i, dep] for i in dep_cfg.get('extra_dependencies', [])])
 
     return visited
 
-def generate_build_for_target(pkg_cfg, target, deps, prefix='',
+def generate_build_for_target(pkg_cfg, target, deps,
                               include_tests=True,
                               include_dep_tests=False,
+                              is_running_tests=False,
                               default_loader=DEFAULT_LOADER):
-    validate_resource_hostname(prefix)
 
-    manifest = {}
-    build = Bunch(resources=Bunch(),
-                  resourcePackages=Bunch(),
-                  packageData=Bunch(),
-                  rootPaths=[],
-                  manifest=manifest,
+    build = Bunch(# Contains section directories for all packages:
+                  packages=Bunch(),
+                  locale=Bunch()
                   )
 
     def add_section_to_build(cfg, section, is_code=False,
@@ -238,30 +300,51 @@ def generate_build_for_target(pkg_cfg, target, deps, prefix='',
                 # configuration dict.
                 dirnames = [dirnames]
             for dirname in resolve_dirs(cfg, dirnames):
-                lib_base = os.path.basename(dirname)
-                if lib_base == '.': 
-                    lib_base = 'root'
-                name = "-".join([prefix + cfg.name, lib_base])
-                validate_resource_hostname(name)
-                if name in build.resources:
-                    raise KeyError('resource already defined', name)
-                build.resourcePackages[name] = cfg.name
-                build.resources[name] = dirname
-                resource_url = 'resource://%s/' % name
+                # ensure that package name is valid
+                try:
+                    validate_resource_hostname(cfg.name)
+                except ValueError, err:
+                    print err
+                    sys.exit(1)
+                # ensure that this package has an entry
+                if not cfg.name in build.packages:
+                    build.packages[cfg.name] = Bunch()
+                # detect duplicated sections
+                if section in build.packages[cfg.name]:
+                    raise KeyError("package's section already defined",
+                                   cfg.name, section)
+                # Register this section (lib, data, tests)
+                build.packages[cfg.name][section] = dirname
 
-                if is_code:
-                    build.rootPaths.insert(0, resource_url)
-                    pkg_manifest, problems = scan_package(prefix, resource_url,
-                                                          cfg.name,
-                                                          section, dirname)
-                    if problems:
-                        # the relevant instructions have already been written
-                        # to stderr
-                        raise BadChromeMarkerError()
-                    manifest.update(pkg_manifest)
+    def add_locale_to_build(cfg):
+        # Bug 730776: Ignore locales for addon-kit, that are only for unit tests
+        if not is_running_tests and cfg.name == "addon-kit":
+            return
 
-                if is_data:
-                    build.packageData[cfg.name] = resource_url
+        path = resolve_dir(cfg, cfg['locale'])
+        files = os.listdir(path)
+        for filename in files:
+            fullpath = os.path.join(path, filename)
+            if os.path.isfile(fullpath) and filename.endswith('.properties'):
+                language = filename[:-len('.properties')]
+
+                from property_parser import parse_file, MalformedLocaleFileError
+                try:
+                    content = parse_file(fullpath)
+                except MalformedLocaleFileError, msg:
+                    print msg[0]
+                    sys.exit(1)
+
+                # Merge current locales into global locale hashtable.
+                # Locale files only contains one big JSON object
+                # that act as an hastable of:
+                # "keys to translate" => "translated keys"
+                if language in build.locale:
+                    merge = (build.locale[language].items() +
+                             content.items())
+                    build.locale[language] = Bunch(merge)
+                else:
+                    build.locale[language] = content
 
     def add_dep_to_build(dep):
         dep_cfg = pkg_cfg.packages[dep]
@@ -269,11 +352,14 @@ def generate_build_for_target(pkg_cfg, target, deps, prefix='',
         add_section_to_build(dep_cfg, "data", is_data=True)
         if include_tests and include_dep_tests:
             add_section_to_build(dep_cfg, "tests", is_code=True)
+        if 'locale' in dep_cfg:
+            add_locale_to_build(dep_cfg)
         if ("loader" in dep_cfg) and ("loader" not in build):
-            build.loader = "resource://%s-%s" % (prefix + dep,
+            build.loader = "%s/%s" % (dep,
                                                  dep_cfg.loader)
 
     target_cfg = pkg_cfg.packages[target]
+
     if include_tests and not include_dep_tests:
         add_section_to_build(target_cfg, "tests", is_code=True)
 
@@ -291,9 +377,8 @@ def generate_build_for_target(pkg_cfg, target, deps, prefix='',
         build['icon64'] = os.path.join(target_cfg.root_dir, target_cfg.icon64)
         del target_cfg['icon64']
 
-    # now go back through and find out where each module lives, to record the
-    # pathname in the manifest
-    update_manifest_with_fileinfo(deps, DEFAULT_LOADER, manifest)
+    if ('preferences' in target_cfg):
+        build['preferences'] = target_cfg.preferences
 
     return build
 

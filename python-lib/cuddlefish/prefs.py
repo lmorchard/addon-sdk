@@ -1,18 +1,66 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 DEFAULT_COMMON_PREFS = {
     # allow debug output via dump to be printed to the system console
     # (setting it here just in case, even though PlainTextConsole also
     # sets this preference)
     'browser.dom.window.dump.enabled': True,
     # warn about possibly incorrect code
-    'javascript.options.strict': True
+    'javascript.options.strict': True,
+    'javascript.options.showInConsole': True,
+
+    'extensions.checkCompatibility.nightly' : False,
+
+    # Disable extension updates and notifications.
+    'extensions.update.enabled' : False,
+    'extensions.update.notifyUser' : False,
+
+    # From:
+    # http://hg.mozilla.org/mozilla-central/file/1dd81c324ac7/build/automation.py.in#l372
+    # Only load extensions from the application and user profile.
+    # AddonManager.SCOPE_PROFILE + AddonManager.SCOPE_APPLICATION
+    'extensions.enabledScopes' : 5,
+    # Disable metadata caching for installed add-ons by default
+    'extensions.getAddons.cache.enabled' : False,
+    # Disable intalling any distribution add-ons
+    'extensions.installDistroAddons' : False,
+    # Allow installing extensions dropped into the profile folder
+    'extensions.autoDisableScopes' : 10,
+
+    # Disable app update
+    'app.update.enabled' : False,
+
+    # Point update checks to a nonexistent local URL for fast failures.
+    'extensions.update.url' : 'http://localhost/extensions-dummy/updateURL',
+    'extensions.blocklist.url' : 'http://localhost/extensions-dummy/blocklistURL',
+    # Make sure opening about:addons won't hit the network.
+    'extensions.webservice.discoverURL' : 'http://localhost/extensions-dummy/discoveryURL'
+}
+
+DEFAULT_FENNEC_PREFS = {
+  'browser.console.showInPanel': True,
+  'browser.firstrun.show.uidiscovery': False
 }
 
 # When launching a temporary new Firefox profile, use these preferences.
 DEFAULT_FIREFOX_PREFS = {
-    'extensions.checkCompatibility.4.0b': False,
     'browser.startup.homepage' : 'about:blank',
     'startup.homepage_welcome_url' : 'about:blank',
-    'devtools.errorconsole.enabled' : True
+    'devtools.errorconsole.enabled' : True,
+
+    # Disable the feedback extension
+    'extensions.testpilot.runStudies' : False,
+
+    # From:
+    # http://hg.mozilla.org/mozilla-central/file/1dd81c324ac7/build/automation.py.in#l388
+    # Make url-classifier updates so rare that they won't affect tests.
+    'urlclassifier.updateinterval' : 172800,
+    # Point the url-classifier to a nonexistent local URL for fast failures.
+    'browser.safebrowsing.provider.0.gethashURL' : 'http://localhost/safebrowsing-dummy/gethash',
+    'browser.safebrowsing.provider.0.keyURL' : 'http://localhost/safebrowsing-dummy/newkey',
+    'browser.safebrowsing.provider.0.updateURL' : 'http://localhost/safebrowsing-dummy/update',
     }
 
 # When launching a temporary new Thunderbird profile, use these preferences.
@@ -22,9 +70,6 @@ DEFAULT_THUNDERBIRD_PREFS = {
     # say no to slow script warnings
     'dom.max_chrome_script_run_time': 200,
     'dom.max_script_run_time': 0,
-    # disable extension stuffs
-    'extensions.update.enabled'    : False,
-    'extensions.update.notifyUser' : False,
     # do not ask about being the default mail client
     'mail.shell.checkDefaultClient': False,
     # disable non-gloda indexing daemons

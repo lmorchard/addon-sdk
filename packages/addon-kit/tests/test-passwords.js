@@ -1,4 +1,7 @@
-"use strict";
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+'use strict';
 
 const { store, search, remove } = require("passwords");
 
@@ -25,6 +28,34 @@ exports["test store requires `username` field"] = function(assert, done) {
     },
     onError: function onError() {
       assert.pass("'`username` is required");
+      done();
+    }
+  });
+};
+
+exports["test onComplete is optional"] = function(assert, done) {
+  store({
+    realm: "bla",
+    username: "bla",
+    password: "bla",
+    onError: function onError() {
+      assert.fail("onError was called");
+    }
+  });
+  assert.pass("exception is not thrown if `onComplete is missing")
+  done();
+};
+
+exports["test exceptions in onComplete are reported"] = function(assert, done) {
+  store({
+    realm: "throws",
+    username: "error",
+    password: "boom!",
+    onComplete: function onComplete(error) {
+      throw new Error("Boom!")
+    },
+    onError: function onError(error) {
+      assert.equal(error.message, "Boom!", "Error thrown is reported");
       done();
     }
   });

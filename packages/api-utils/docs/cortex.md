@@ -1,6 +1,9 @@
-# Cortex #
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
 
-## property encapsulation ##
+
+## Property Encapsulation ##
 
 In JavaScript it is not possible to create properties that have limited or
 controlled accessibility. It is possible to create non-enumerable and
@@ -30,7 +33,7 @@ is that there is no immediate solution for inheriting access to the privates
     }
     Derived.prototype = Object.create(Foo.prototype);
 
-## facade objects ##
+## Facade Objects ##
 
 Alternatively constructor can returned facade objects - proxies to the
 instance's public properties:
@@ -66,7 +69,7 @@ both own and inherited private properties, it does not addresses following:
  - Behavior of `instanceof` is broken, since `new Derived() instanceof Derived`
    is going to evaluate to `false`.
 
-## Temper proving with property descriptor maps ##
+## Tamper Proofing with Property Descriptor Maps ##
 
 In ES5 new property descriptor maps were introduced, which can be used as a
 building blocks for defining reusable peace of functionality. To some degree
@@ -104,7 +107,7 @@ they are not exposed by default).
       DerivedDescriptor[key] = FooDescriptor[key];
     });
 
-## cortex objects ##
+## Cortex Objects ##
 
 Last approach solves all of the concerns, but adds complexity, verbosity
 and decreases code readability. Combination of `Cortex`'s and `Trait`'s

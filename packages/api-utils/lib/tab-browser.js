@@ -1,49 +1,22 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Jetpack.
- *
- * The Initial Developer of the Original Code is Mozilla.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Atul Varma <atul@mozilla.com>
- *   Dietrich Ayala <dietrich@mozilla.com>
- *   Felipe Gomes <felipc@gmail.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+'use strict';
 
-const {Cc,Ci,Cu} = require("chrome");
+module.metadata = {
+  'stability': 'deprecated'
+};
+
+const {Cc,Ci,Cu} = require('chrome');
 var NetUtil = {};
-Cu.import("resource://gre/modules/NetUtil.jsm", NetUtil);
+Cu.import('resource://gre/modules/NetUtil.jsm', NetUtil);
 NetUtil = NetUtil.NetUtil;
-const errors = require("errors");
-const windowUtils = require("window-utils");
-const apiUtils = require("api-utils");
-const collection = require("collection");
+const errors = require('./errors');
+const windowUtils = require('./window-utils');
+const apiUtils = require('./api-utils');
+const collection = require('./collection');
+const { getMostRecentBrowserWindow } = require('./window/utils');
+const { getSelectedTab } = require('./tabs/utils');
 
 // TODO: The hard-coding of app-specific info here isn't very nice;
 // ideally such app-specific info should be more decoupled, and the
@@ -51,12 +24,23 @@ const collection = require("collection");
 // runtime, perhaps by inspecting supported packages (e.g. via
 // dynamically-named modules or package-defined extension points).
 
-if (!require("xul-app").is("Firefox")) {
+if (!require("./xul-app").is("Firefox")) {
   throw new Error([
     "The tab-browser module currently supports only Firefox.  In the future ",
     "it will support other applications. Please see ",
     "https://bugzilla.mozilla.org/show_bug.cgi?id=560716 for more information."
   ].join(""));
+}
+
+function onBrowserLoad(callback, event) {
+  if (event.target && event.target.defaultView == this) {
+    this.removeEventListener("load", onBrowserLoad, true);
+    try {
+      require("timer").setTimeout(function () {
+        callback(event);
+      }, 10);
+    } catch (e) { console.exception(e); }
+  }
 }
 
 // Utility function to open a new browser window.
@@ -68,20 +52,8 @@ function openBrowserWindow(callback, url) {
   urlString.data = url;
   let window = ww.openWindow(null, "chrome://browser/content/browser.xul",
                              "_blank", "chrome,all,dialog=no", urlString);
-  if (callback) {
-    function onLoad(event) {
-      if (event.target && event.target.defaultView == window) {
-        window.removeEventListener("load", onLoad, true);
-        try {
-          require("timer").setTimeout(function () {
-            callback(event);
-          }, 10);
-        } catch (e) { console.exception(e); }
-      }
-    }
-
-    window.addEventListener("load", onLoad, true);
-  }
+  if (callback)
+    window.addEventListener("load", onBrowserLoad.bind(window, callback), true);
 
   return window;
 }
@@ -113,31 +85,30 @@ exports.addTab = function addTab(url, options) {
     }
   });
 
-  var wm = Cc["@mozilla.org/appshell/window-mediator;1"]
-           .getService(Ci.nsIWindowMediator);
-  var win = wm.getMostRecentWindow("navigator:browser");
+  var win = getMostRecentBrowserWindow();
   if (!win || options.inNewWindow) {
     openBrowserWindow(function(e) {
       if(options.isPinned) {
         //get the active tab in the recently created window
         let mainWindow = e.target.defaultView;
-        mainWindow.gBrowser.pinTab(mainWindow.gBrowser.selectedTab);
+        mainWindow.gBrowser.pinTab(getSelectedTab(mainWindow));
       }
-      require("errors").catchAndLog(function(e) options.onLoad(e))(e);
+      require("./errors").catchAndLog(function(e) options.onLoad(e))(e);
     }, options.url);
-  } else {
+  }
+  else {
     let tab = win.gBrowser.addTab(options.url);
     if (!options.inBackground)
       win.gBrowser.selectedTab = tab;
     if (options.onLoad) {
       let tabBrowser = win.gBrowser.getBrowserForTab(tab);
-      tabBrowser.addEventListener("load", function(e) {
+      tabBrowser.addEventListener("load", function onLoad(e) {
         if (e.target.defaultView.content.location == "about:blank")
           return;
         // remove event handler from addTab - don't want notified
         // for subsequent loads in same tab.
-        tabBrowser.removeEventListener("load", arguments.callee, true);
-        require("errors").catchAndLog(function(e) options.onLoad(e))(e);
+        tabBrowser.removeEventListener("load", onLoad, true);
+        require("./errors").catchAndLog(function(e) options.onLoad(e))(e);
       }, true);
     }
   }
@@ -164,9 +135,9 @@ function Tracker(delegate, window) {
   this._delegate = delegate;
   this._browsers = [];
   this._window = window;
-  this._windowTracker = new windowUtils.WindowTracker(this);
+  this._windowTracker = windowUtils.WindowTracker(this);
 
-  require("unload").ensure(this);
+  require("./unload").ensure(this);
 }
 Tracker.prototype = {
   __iterator__: function __iterator__() {
@@ -180,17 +151,17 @@ Tracker.prototype = {
     if (this._window && window != this._window)
       return;
 
-    for (browser in tabBrowserIterator(window))
+    for (let browser in tabBrowserIterator(window))
       this._browsers.push(browser);
     if (this._delegate)
-      for (browser in tabBrowserIterator(window))
+      for (let browser in tabBrowserIterator(window))
         this._delegate.onTrack(browser);
   },
   onUntrack: function onUntrack(window) {
     if (this._window && window != this._window)
       return;
 
-    for (browser in tabBrowserIterator(window)) {
+    for (let browser in tabBrowserIterator(window)) {
       let index = this._browsers.indexOf(browser);
       if (index != -1)
         this._browsers.splice(index, 1);
@@ -198,7 +169,7 @@ Tracker.prototype = {
         console.error("internal error: browser tab not found");
     }
     if (this._delegate)
-      for (browser in tabBrowserIterator(window))
+      for (let browser in tabBrowserIterator(window))
         this._delegate.onUntrack(browser);
   },
   get length() {
@@ -216,7 +187,7 @@ function TabTracker(delegate, window) {
   this._delegate = delegate;
   this._tabs = [];
   this._tracker = new Tracker(this, window);
-  require("unload").ensure(this);
+  require("./unload").ensure(this);
 }
 TabTracker.prototype = {
   _TAB_EVENTS: ["TabOpen", "TabClose"],
@@ -253,7 +224,7 @@ TabTracker.prototype = {
     }
   },
   onTrack: function onTrack(tabbrowser) {
-    for (tab in tabIterator(tabbrowser))
+    for (let tab in tabIterator(tabbrowser))
       this._safeTrackTab(tab);
     var self = this;
     this._TAB_EVENTS.forEach(
@@ -262,7 +233,7 @@ TabTracker.prototype = {
       });
   },
   onUntrack: function onUntrack(tabbrowser) {
-    for (tab in tabIterator(tabbrowser))
+    for (let tab in tabIterator(tabbrowser))
       this._safeUntrackTab(tab);
     var self = this;
     this._TAB_EVENTS.forEach(
@@ -277,7 +248,7 @@ TabTracker.prototype = {
 exports.TabTracker = apiUtils.publicConstructor(TabTracker);
 
 exports.whenContentLoaded = function whenContentLoaded(callback) {
-  var cb = require("errors").catchAndLog(function eventHandler(event) {
+  var cb = require("./errors").catchAndLog(function eventHandler(event) {
     if (event.target && event.target.defaultView)
       callback(event.target.defaultView);
   });
@@ -294,11 +265,10 @@ exports.whenContentLoaded = function whenContentLoaded(callback) {
   return tracker;
 };
 
-exports.__defineGetter__("activeTab", function() {
-  const wm = Cc["@mozilla.org/appshell/window-mediator;1"].
-             getService(Ci.nsIWindowMediator);
-  let mainWindow = wm.getMostRecentWindow("navigator:browser");
-  return mainWindow.gBrowser.selectedTab;
+Object.defineProperty(exports, 'activeTab', {
+  get: function() {
+    return getSelectedTab(getMostRecentBrowserWindow());
+  }
 });
 
 /******************* TabModule *********************/
@@ -388,7 +358,7 @@ let TabModule = exports.TabModule = function TabModule(window) {
    */
   this.__defineGetter__("activeTab", function() {
     try {
-      return window ? tabConstructor(window.gBrowser.selectedTab)
+      return window ? tabConstructor(getSelectedTab(window))
                     : tabConstructor(exports.activeTab);
     }
     catch (e) { }
@@ -426,7 +396,7 @@ let TabModule = exports.TabModule = function TabModule(window) {
     },
     pushTabEvent: function TETT_pushTabEvent(event, tab) {
       for (let callback in self[event]) {
-        require("errors").catchAndLog(function(tab) {
+        require("./errors").catchAndLog(function(tab) {
           callback(new tabConstructor(tab));
         })(tab);
       }
@@ -437,7 +407,7 @@ let TabModule = exports.TabModule = function TabModule(window) {
             let [tabEl,] = getElementAndWindowForTab(tabObj, window);
             if (tabEl == tab) {
               for (let callback in tabObj[event])
-                require("errors").catchAndLog(function() callback())();
+                require("./errors").catchAndLog(function() callback())();
             }
           }
           // if being closed, remove the tab object from the cache
@@ -452,7 +422,7 @@ let TabModule = exports.TabModule = function TabModule(window) {
       this.tabs.splice(0);
     }
   };
-  require("unload").ensure(eventsTabDelegate);
+  require("./unload").ensure(eventsTabDelegate);
 
   let eventsTabTracker = new ModuleTabTracker({
     onTrack: function TETT_onTrack(tab) {
@@ -479,7 +449,7 @@ let TabModule = exports.TabModule = function TabModule(window) {
       eventsTabDelegate.pushTabEvent("onPaint", tab);
     }
   }, window);
-  require("unload").ensure(eventsTabTracker);
+  require("./unload").ensure(eventsTabTracker);
 
   // Iterator for all tabs
   this.__iterator__ = function tabsIterator() {
@@ -494,7 +464,7 @@ let TabModule = exports.TabModule = function TabModule(window) {
     // Unregister tabs event listeners
     events.forEach(function(e) self[e] = []);
   }
-  require("unload").ensure(this);
+  require("./unload").ensure(this);
 
 } // End of TabModule constructor
 
@@ -526,7 +496,7 @@ function open(options, tabConstructor, window) {
   if (window)
     options.inNewWindow = false;
 
-  let win = window || require("window-utils").activeBrowserWindow;
+  let win = window || require("./window-utils").activeBrowserWindow;
 
   if (!win || options.inNewWindow)
     openURLInNewWindow(options, tabConstructor);
@@ -543,10 +513,10 @@ function openURLInNewWindow(options, tabConstructor) {
       let win = e.target.defaultView;
       let tabEl = win.gBrowser.tabContainer.childNodes[0];
       let tabBrowser = win.gBrowser.getBrowserForTab(tabEl);
-      tabBrowser.addEventListener("load", function(e) {
-        tabBrowser.removeEventListener("load", arguments.callee, true);
+      tabBrowser.addEventListener("load", function onLoad(e) {
+        tabBrowser.removeEventListener("load", onLoad, true);
         let tab = tabConstructor(tabEl);
-        require("errors").catchAndLog(function(e) options.onOpen(e))(tab);
+        require("./errors").catchAndLog(function(e) options.onOpen(e))(tab);
       }, true);
     };
   }
@@ -565,13 +535,13 @@ function openURLInNewTab(options, window, tabConstructor) {
     window.gBrowser.pinTab(tabEl);
   if (options.onOpen) {
     let tabBrowser = window.gBrowser.getBrowserForTab(tabEl);
-    tabBrowser.addEventListener("load", function(e) {
+    tabBrowser.addEventListener("load", function onLoad(e) {
       // remove event handler from addTab - don't want to be notified
       // for subsequent loads in same tab.
-      tabBrowser.removeEventListener("load", arguments.callee, true);
+      tabBrowser.removeEventListener("load", onLoad, true);
       let tab = tabConstructor(tabEl);
-      require("timer").setTimeout(function() {
-        require("errors").catchAndLog(function(tab) options.onOpen(tab))(tab);
+      require("./timer").setTimeout(function() {
+        require("./errors").catchAndLog(function(tab) options.onOpen(tab))(tab);
       }, 10);
     }, true);
   }
@@ -580,7 +550,7 @@ function openURLInNewTab(options, window, tabConstructor) {
 function getElementAndWindowForTab(tabObj, window) {
   // iterate over open windows, or use single window if provided
   let windowIterator = window ? function() { yield window; }
-                              : require("window-utils").windowIterator;
+                              : require("./window-utils").windowIterator;
   for (let win in windowIterator()) {
     if (win.gBrowser) {
       // find the tab element at tab.index
@@ -599,7 +569,7 @@ function ModuleTabTracker(delegate, window) {
   this._delegate = delegate;
   this._tabs = [];
   this._tracker = new Tracker(this, window);
-  require("unload").ensure(this);
+  require("./unload").ensure(this);
 }
 ModuleTabTracker.prototype = {
   _TAB_EVENTS: ["TabOpen", "TabClose", "TabSelect", "DOMContentLoaded",
@@ -709,7 +679,7 @@ ModuleTabTracker.prototype = {
     }
   },
   onTrack: function onTrack(tabbrowser) {
-    for (tab in tabIterator(tabbrowser))
+    for (let tab in tabIterator(tabbrowser))
       this._safeTrackTab(tab);
     tabbrowser.tabContainer.addEventListener("TabOpen", this, false);
     tabbrowser.tabContainer.addEventListener("TabClose", this, false);
@@ -717,7 +687,7 @@ ModuleTabTracker.prototype = {
     tabbrowser.ownerDocument.defaultView.gBrowser.addEventListener("DOMContentLoaded", this, false);
   },
   onUntrack: function onUntrack(tabbrowser) {
-    for (tab in tabIterator(tabbrowser))
+    for (let tab in tabIterator(tabbrowser))
       this._safeUntrackTab(tab);
     tabbrowser.tabContainer.removeEventListener("TabOpen", this, false);
     tabbrowser.tabContainer.removeEventListener("TabClose", this, false);
@@ -733,7 +703,7 @@ ModuleTabTracker.prototype = {
 function getThumbnailCanvasForTab(tabEl, window) {
   var thumbnail = window.document.createElementNS("http://www.w3.org/1999/xhtml", "canvas");
   thumbnail.mozOpaque = true;
-  var window = tabEl.linkedBrowser.contentWindow;
+  window = tabEl.linkedBrowser.contentWindow;
   thumbnail.width = Math.ceil(window.screen.availWidth / 5.75);
   var aspectRatio = 0.5625; // 16:9
   thumbnail.height = Math.round(thumbnail.width * aspectRatio);

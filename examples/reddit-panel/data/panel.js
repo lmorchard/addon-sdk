@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 // This is a content script.  It executes inside the context of the Reddit page
 // loaded into the panel and has access to that page's window object and other
 // global objects (although the page does not have access to globals defined by
@@ -22,5 +26,10 @@ $(window).click(function (event) {
   // Intercept the click, passing it to the addon, which will load it in a tab.
   event.stopPropagation();
   event.preventDefault();
-  postMessage(t.toString());
+  self.port.emit('click', t.toString());
 });
+
+// Panels have an OS-specific background color by default, and the Mac OS X
+// background color is dark grey, but Reddit expects its background to be white
+// and looks odd when it isn't, so set it to white.
+$("body").css("background", "white");

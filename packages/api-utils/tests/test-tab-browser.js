@@ -1,42 +1,21 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Jetpack.
- *
- * The Initial Developer of the Original Code is Mozilla.
- * Portions created by the Initial Developer are Copyright (C) 2010
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Atul Varma <atul@mozilla.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 var timer = require("timer");
 var {Cc,Ci} = require("chrome");
 
+function onBrowserLoad(callback, event) {
+  if (event.target && event.target.defaultView == this) {
+    this.removeEventListener("load", onBrowserLoad, true);
+    let browsers = this.document.getElementsByTagName("tabbrowser");
+    try {
+      timer.setTimeout(function (window) {
+        callback(window, browsers[0]);
+      }, 10, this);
+    } catch (e) { console.exception(e); }
+  }
+}
 // Utility function to open a new browser window.
 function openBrowserWindow(callback, url) {
   let ww = Cc["@mozilla.org/embedcomp/window-watcher;1"].
@@ -46,30 +25,17 @@ function openBrowserWindow(callback, url) {
   urlString.data = url;
   let window = ww.openWindow(null, "chrome://browser/content/browser.xul",
                              "_blank", "chrome,all,dialog=no", urlString);
-  if (callback) {
-    function onLoad(event) {
-      if (event.target && event.target.defaultView == window) {
-        window.removeEventListener("load", onLoad, true);
-        let browsers = window.document.getElementsByTagName("tabbrowser");
-        try {
-          require("timer").setTimeout(function () {
-            callback(window, browsers[0]);
-          }, 10);
-        } catch (e) { console.exception(e); }
-      }
-    }
-
-    window.addEventListener("load", onLoad, true);
-  }
+  if (callback)
+    window.addEventListener("load", onBrowserLoad.bind(window, callback), true);
 
   return window;
 }
 
 // Helper for calling code at window close
 function closeBrowserWindow(window, callback) {
-  require("timer").setTimeout(function() {
-    window.addEventListener("unload", function() {
-      window.removeEventListener("unload", arguments.callee, false);
+  timer.setTimeout(function() {
+    window.addEventListener("unload", function onUnload() {
+      window.removeEventListener("unload", onUnload, false);
       callback();
     }, false);
     window.close();
@@ -110,22 +76,22 @@ exports.testAddTab = function(test) {
     let startWindowCount = cache.length;
 
     // Test 1: add a tab
-    let firstUrl = "data:text/html,one";
+    let firstUrl = "data:text/html;charset=utf-8,one";
     tabBrowser.addTab(firstUrl, {
       onLoad: function(e) {
         let win1 = cache[startWindowCount - 1];
         test.assertEqual(win1.content.location, firstUrl, "URL of new tab in first window matches");
 
         // Test 2: add a tab in a new window
-        let secondUrl = "data:text/html,two";
+        let secondUrl = "data:text/html;charset=utf-8,two";
         tabBrowser.addTab(secondUrl, {
           inNewWindow: true,
           onLoad: function(e) {
             test.assertEqual(cache.length, startWindowCount + 1, "a new window was opened");
             let win2 = cache[startWindowCount];
             let gBrowser = win2.gBrowser;
-            gBrowser.addEventListener("DOMContentLoaded", function(e) {
-              gBrowser.removeEventListener("DOMContentLoaded", arguments.callee, false);
+            gBrowser.addEventListener("DOMContentLoaded", function onLoad(e) {
+              gBrowser.removeEventListener("DOMContentLoaded", onLoad, false);
               test.assertEqual(win2.content.location, secondUrl, "URL of new tab in the new window matches");
 
               closeBrowserWindow(win2, function() {
@@ -153,7 +119,7 @@ exports.testTrackerWithDelegate = function(test) {
       }
       else if (this.state == "waiting for browser window to open") {
         this.state = "waiting for browser window to close";
-        require("timer").setTimeout(function() {
+        timer.setTimeout(function() {
           closeBrowserWindow(browser.ownerDocument.defaultView, function() {
             test.assertEqual(delegate.state, "deinitializing");
             tb.unload();
@@ -190,14 +156,14 @@ exports.testWhenContentLoaded = function(test) {
       test.assertEqual(item.textContent, "bar",
                        "whenContentLoaded() works.");
       tracker.unload();
-      closeBrowserWindow(activeWindow, function() {
+      closeBrowserWindow(activeWindow(), function() {
         test.done();
       });
     });
 
   openBrowserWindow(function(browserWindow, browser) {
     var html = '<div id="foo">bar</div>';
-    browser.addTab("data:text/html," + html);
+    browser.addTab("data:text/html;charset=utf-8," + html);
   });
 };
 
@@ -248,9 +214,9 @@ exports.testTabTracker = function(test) {
     let tabTracker = tabBrowser.TabTracker(delegate);
 
     let tracked = delegate.tracked;
-    let url1 = "data:text/html,1";
-    let url2 = "data:text/html,2";
-    let url3 = "data:text/html,3";
+    let url1 = "data:text/html;charset=utf-8,1";
+    let url2 = "data:text/html;charset=utf-8,2";
+    let url3 = "data:text/html;charset=utf-8,3";
     let tabCount = 0; 
 
     function tabLoadListener(e) {
@@ -266,7 +232,7 @@ exports.testTabTracker = function(test) {
         test.assertEqual(delegate.tracked, tracked + 3, "delegate tracked tabs matched count");
         tabTracker.unload();
         closeBrowserWindow(browserWindow, function() {
-          require("timer").setTimeout(function() test.done(), 0);
+          timer.setTimeout(function() test.done(), 0);
         });
       }
     }
@@ -290,8 +256,8 @@ exports.testActiveTab = function(test) {
     const TabModule = require("tab-browser").TabModule;
     let tm = new TabModule(browserWindow);
     test.assertEqual(tm.length, 1);
-    let url1 = "data:text/html,foo";
-    let url2 = "data:text/html,bar";
+    let url1 = "data:text/html;charset=utf-8,foo";
+    let url2 = "data:text/html;charset=utf-8,bar";
 
     function tabURL(tab) tab.ownerDocument.defaultView.content.location.toString()
 
@@ -349,7 +315,7 @@ exports.testEventsAndLengthStayInModule = function(test) {
     tm1.onOpen = function() ++counter1 && onOpenListener();
     tm2.onOpen = function() ++counter2 && onOpenListener();
 
-    let url = "data:text/html,default";
+    let url = "data:text/html;charset=utf-8,default";
     tm1.open(url);
     tm1.open(url);
 
@@ -367,32 +333,53 @@ exports.testTabModuleActiveTab_getterAndSetter = function(test) {
     let tm1 = new TabModule(window1);
     let tm2 = new TabModule(window2);
 
-    let tab1 = null;
+    // First open two tabs per window
     tm1.open({
-      url: "data:text/html,<title>window1,tab1</title>",
-      onOpen: function(tab) tab1 = tab,
-    });
-    tm1.open("data:text/html,<title>window1,tab2</title>");
-
-    tm1.onActivate = function() {
-      tm1.onActivate.remove(arguments.callee);
-      require("timer").setTimeout(function() {
-        test.assertEqual(tm1.activeTab.title, "window1,tab1", "activeTab setter works");
-        closeTwoWindows(window1, window2, function() test.done());
-      }, 1000);
-    }
-
-    tm2.open("data:text/html,<title>window2,tab1</title>");
-    tm2.open({
-      url: "data:text/html,<title>window2,tab2</title>",
-      onOpen: function(tab4) {
-        test.assertEqual(tm1.activeTab.title, "window1,tab2", "Correct active tab on window 1");
-        test.assertEqual(tm2.activeTab.title, "window2,tab2", "Correct active tab on window 2");
-
-        tm1.activeTab = tab1;
-        tm1.activeTab = tab4; // Setting activeTab from another window should have no effect
+      url: "data:text/html;charset=utf-8,<title>window1,tab1</title>",
+      onOpen: function(tab1) {
+        tm1.open({
+          url: "data:text/html;charset=utf-8,<title>window1,tab2</title>",
+          onOpen: function (tab2) {
+            tm2.open({
+              url: "data:text/html;charset=utf-8,<title>window2,tab1</title>",
+              onOpen: function (tab3) {
+                tm2.open({
+                  url: "data:text/html;charset=utf-8,<title>window2,tab2</title>",
+                  onOpen: function(tab4) {
+                    onTabsOpened(tab1, tab2, tab3, tab4);
+                  }
+                });
+              }
+            });
+          }
+        });
       }
     });
+
+    // Then try to activate tabs, but wait for all of them to be activated after
+    // being opened
+    function onTabsOpened(tab1, tab2, tab3, tab4) {
+      test.assertEqual(tm1.activeTab.title, "window1,tab2",
+                       "Correct active tab on window 1");
+      test.assertEqual(tm2.activeTab.title, "window2,tab2",
+                       "Correct active tab on window 2");
+
+      tm1.onActivate = function onActivate() {
+        tm1.onActivate.remove(onActivate);
+        timer.setTimeout(function() {
+          test.assertEqual(tm1.activeTab.title, "window1,tab1",
+                           "activeTab setter works (window 1)");
+          test.assertEqual(tm2.activeTab.title, "window2,tab2",
+                           "activeTab is ignored with tabs from another window");
+          closeTwoWindows(window1, window2, function() test.done());
+        }, 1000);
+      }
+
+      tm1.activeTab = tab1;
+      // Setting activeTab from another window should have no effect:
+      tm1.activeTab = tab4;
+    }
+
   });
 }
 
@@ -403,7 +390,7 @@ exports.testTabModuleTabsIterator = function(test) {
 
   openBrowserWindow(function(window) {
     let tm1 = new TabModule(window);
-    let url = "data:text/html,default";
+    let url = "data:text/html;charset=utf-8,default";
     tm1.open(url);
     tm1.open(url);
     tm1.open({
@@ -426,7 +413,7 @@ exports.testTabModuleCantOpenInNewWindow = function(test) {
 
   openBrowserWindow(function(window) {
     let tm = new TabModule(window);
-    let url = "data:text/html,default";
+    let url = "data:text/html;charset=utf-8,default";
     tm.open({
       url: url,
       inNewWindow: true,
@@ -448,7 +435,7 @@ exports.testModuleListenersDontInteract = function(test) {
     let tm1 = new TabModule(window);
     let tm2 = new TabModule(window);
 
-    let url = "data:text/html,foo";
+    let url = "data:text/html;charset=utf-8,foo";
     let eventCount = 0, eventModule1 = 0, eventModule2 = 0;
 
     
@@ -479,17 +466,19 @@ exports.testModuleListenersDontInteract = function(test) {
 
         tab.location = url;
 
-        require("timer").setTimeout(function() {
-          // if this never occurs, the test'll timeout and fail.
-          test.assertEqual(eventCount, 4, "Correct global number of events");
-          test.assertEqual(eventModule1, 2, "Correct number of events on module 1");
-          test.assertEqual(eventModule2, 2, "Correct number of events on module 2");
+        test.waitUntilEqual(function () eventCount, 4,
+                            "Correct global number of events")
+            .then(function () {
+              test.assertEqual(eventModule1, 2,
+                               "Correct number of events on module 1");
+              test.assertEqual(eventModule2, 2,
+                               "Correct number of events on module 2");
 
-          tm1.onReady.remove(listener1);
-          tab.onReady.remove(listener2);
-          tab.onReady.remove(listener3);
-          closeBrowserWindow(window, function() test.done());
-        }, 1000);
+              tm1.onReady.remove(listener1);
+              tab.onReady.remove(listener2);
+              tab.onReady.remove(listener3);
+              closeBrowserWindow(window, function() test.done());
+            });
       }
     });
   });
@@ -498,11 +487,11 @@ exports.testModuleListenersDontInteract = function(test) {
 /******************* helpers *********************/
 
 // Helper for getting the active window
-this.__defineGetter__("activeWindow", function activeWindow() {
+function activeWindow() {
   return Cc["@mozilla.org/appshell/window-mediator;1"].
          getService(Ci.nsIWindowMediator).
          getMostRecentWindow("navigator:browser");
-});
+};
 
 // If the module doesn't support the app we're being run in, require() will
 // throw.  In that case, remove all tests above from exports, and add one dummy
@@ -515,11 +504,10 @@ catch (err) {
   let bug = "https://bugzilla.mozilla.org/show_bug.cgi?id=560716";
   if (err.message.indexOf(bug) < 0)
     throw err;
-  for (let [prop, val] in Iterator(exports)) {
-    if (/^test/.test(prop) && typeof(val) === "function")
-      delete exports[prop];
-  }
-  exports.testAppNotSupported = function (test) {
-    test.pass("the tab-browser module does not support this application.");
+
+  module.exports = {
+    testAppNotSupported: function (test) {
+      test.pass("the tab-browser module does not support this application.");
+    }
   };
 }

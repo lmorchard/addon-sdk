@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 "use strict";
 const { Loader } = require('content/loader');
 const self = require("self");
@@ -81,7 +85,7 @@ exports['test:contentURL'] = function(test) {
     emitted,
     'must not emit `propertyChange` if same value is set'
   );
-  
+
   loader.removeListener('propertyChange', listener);
   loader.contentURL = value = 'about:blank';
   test.assertEqual(
@@ -99,13 +103,13 @@ exports['test:contentURL'] = function(test) {
 exports['test:contentScriptWhen'] = function(test) {
   let loader = Loader();
   test.assertEqual(
-    'start',
+    'end',
     loader.contentScriptWhen,
-    '`contentScriptWhen` defaults to "start"'
+    '`contentScriptWhen` defaults to "end"'
   );
-  loader.contentScriptWhen = "ready";
+  loader.contentScriptWhen = "end";
   test.assertEqual(
-    "ready",
+    "end",
     loader.contentScriptWhen
   );
   try {
@@ -113,15 +117,20 @@ exports['test:contentScriptWhen'] = function(test) {
     test.fail('must throw when wrong value is set');
   } catch(e) {
     test.assertEqual(
-      'The `contentScriptWhen` option must be either "start" or "ready".',
+      'The `contentScriptWhen` option must be either "start", "ready" or "end".',
       e.message
     );
   }
   loader.contentScriptWhen = null;
   test.assertEqual(
-    'start',
+    'end',
     loader.contentScriptWhen,
-    '`contentScriptWhen` defaults to "start"'
+    '`contentScriptWhen` defaults to "end"'
+  );
+  loader.contentScriptWhen = "ready";
+  test.assertEqual(
+    "ready",
+    loader.contentScriptWhen
   );
   loader.contentScriptWhen = "start";
   test.assertEqual(
@@ -147,7 +156,7 @@ exports['test:contentScript'] = function(test) {
     test.fail('must throw when wrong value is set');
   } catch(e) {
     test.assertEqual(
-      'The script option must be a string or an array of strings.',
+      'The `contentScript` option must be a string or an array of strings.',
       e.message
     );
   }
@@ -156,7 +165,7 @@ exports['test:contentScript'] = function(test) {
     test.fail('must throw when wrong value is set');
   } catch(e) {
     test.assertEqual(
-      'The script option must be a string or an array of strings.',
+      'The `contentScript` option must be a string or an array of strings.',
       e.message
     );
   }
@@ -189,21 +198,21 @@ exports['test:contentScriptFile'] = function(test) {
     test.fail('must throw when wrong value is set');
   } catch(e) {
     test.assertEqual(
-      'The `contentScriptFile` option must be a local file URL or an array of'
-          + 'URLs.',
+      'The `contentScriptFile` option must be a local URL or an array of URLs.',
       e.message
     );
   }
+
   try {
-    loader.contentScriptFile = ['oue', uri]
+    loader.contentScriptFile = [ 'oue', uri ]
     test.fail('must throw when wrong value is set');
   } catch(e) {
     test.assertEqual(
-      'The `contentScriptFile` option must be a local file URL or an array of'
-          + 'URLs.',
+      'The `contentScriptFile` option must be a local URL or an array of URLs.',
       e.message
     );
   }
+
   loader.contentScriptFile = undefined;
   test.assertEqual(
     null,
@@ -215,4 +224,3 @@ exports['test:contentScriptFile'] = function(test) {
     loader.contentScriptFile
   );
 };
-

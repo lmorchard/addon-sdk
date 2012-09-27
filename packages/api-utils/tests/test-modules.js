@@ -1,3 +1,19 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+exports.testDefine = function(test) {
+  let tiger = require('./modules/tiger');
+  test.assertEqual(tiger.name, 'tiger', 'name proprety was exported properly');
+  test.assertEqual(tiger.type, 'cat', 'property form other module exported');
+};
+
+exports.testDefineInoresNonFactory = function(test) {
+  let mod = require('./modules/async2');
+  test.assertEqual(mod.name, 'async2', 'name proprety was exported properly');
+  test.assertNotEqual(mod.traditional2Name, 'traditional2', '1st is ignored');
+};
+/* Disable test that require AMD specific functionality:
 
 // define() that exports a function as the module value,
 // specifying a module name.
@@ -96,7 +112,7 @@ exports.testBadExportAndReturn = function (test) {
 // test a bad circular dependency, where an exported value is needed, but
 // the return value happens too late, a module already asked for the exported
 // value.
-exports.testBadExportAndReturn = function (test) {
+exports.testBadExportAndReturnCircular = function (test) {
   var passed = false;
   try {
     var bad = require('modules/badFirst');
@@ -106,19 +122,6 @@ exports.testBadExportAndReturn = function (test) {
   }
   test.assertEqual(passed, true, 'Make sure return after an exported ' +
                                  'value is grabbed by another module fails.');
-}
-
-// test a bad name in a define() call, where it does not match the expected
-// name for the module.
-exports.testBadDefineName = function (test) {
-  var passed = false;
-  try {
-    var sheep = require('modules/sheep');
-  } catch(e) {
-    passed = /Mismatched define/.test(e.toString());
-  }
-  test.assertEqual(passed, true, 'Make sure name in define call matches ' +
-                                 'the expected name for the module.');
 }
 
 // only allow one define call per file.
@@ -142,3 +145,4 @@ exports.testOneDefineNested = function (test) {
   }
   test.assertEqual(passed, true, 'Only allow one define call per module');
 }
+*/
